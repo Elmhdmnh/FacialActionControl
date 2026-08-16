@@ -70,6 +70,19 @@ python main.py
 - `THRESHOLD = 0.9`：触发阈值。不触发就调低（如 0.85），容易误触发就调高
 - `time.sleep(0.05)`：识别循环的帧率限制，机器差可以调大（如 0.1）
 
+## 打包成 exe
+
+用 PyInstaller 打成独立的 Windows 可执行文件（可选，直接 `python main.py` 也能用）：
+
+```powershell
+pyinstaller --noconfirm --clean --onefile --windowed --collect-all onnxruntime --collect-all onnx --collect-all insightface --collect-all scipy --collect-all skimage --collect-all nvidia-cuda-runtime-cu12 --collect-all nvidia-cublas-cu12 --collect-all nvidia-cudnn-cu12 --collect-all nvidia-cufft-cu12 -i 2.jpg main.py
+```
+
+- 生成的 exe 在 `dist\main.exe`，`face_points.json` 会自动保存在 exe 旁边
+- `--windowed` 不显示黑色控制台窗口；想调试看打印就删掉这个参数
+- 四个 `--collect-all nvidia-*` 把 CUDA 12 运行库打进包，让 exe 也能用 GPU
+- 文件较大（几百 MB）属正常，因为包含了 scipy、skimage 和 CUDA 库
+
 ## 数据文件
 
 表情保存在 `face_points.json`：
