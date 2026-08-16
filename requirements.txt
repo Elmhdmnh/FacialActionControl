@@ -1,6 +1,6 @@
 # ---------- 核心依赖 ----------
 insightface==1.0.1
-opencv-python==5.0.0
+opencv-python>=4.8.0
 numpy>=1.24
 pyautogui>=0.9.54
 pyperclip>=1.8

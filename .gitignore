@@ -1,6 +1,7 @@
-# 本地数据（用户自己录的表情，别传上去）
 face_points.json
-
-# Python 缓存
 __pycache__/
 *.pyc
+*.exe
+*.spec
+dist
+build
