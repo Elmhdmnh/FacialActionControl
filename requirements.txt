@@ -1,0 +1,16 @@
+# ---------- 核心依赖 ----------
+insightface==1.0.1
+opencv-python==5.0.0
+numpy>=1.24
+pyautogui>=0.9.54
+pyperclip>=1.8
+
+# ---------- 推理加速：NVIDIA GPU 用户（推荐，需 CUDA 12 运行库） ----------
+onnxruntime-gpu==1.22.0
+nvidia-cuda-runtime-cu12
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+nvidia-cufft-cu12
+
+# ---------- 没有 NVIDIA 显卡时，改用 CPU 版（删掉上面的 GPU 部分） ----------
+# onnxruntime>=1.22
