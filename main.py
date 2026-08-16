@@ -1,25 +1,51 @@
 import glob
 import os
 import site
+import sys
 
 
 def _add_nvidia_bins_to_path():
-    # onnxruntime 只认 PATH（不认 os.add_dll_directory），把 CUDA/cuDNN 的 bin 加进 PATH
-    dirs = set()
+    # onnxruntime 只认 PATH（不认 os.add_dll_directory），把 CUDA/cuDNN 的 bin 加进 PATH。
+    # 打包成 exe 后 getsitepackages 指向包内目录，所以要额外扫 _MEIPASS 和 exe 所在目录。
+    roots = set()
     try:
-        dirs.update(site.getsitepackages())
+        roots.update(site.getsitepackages())
     except Exception:
         pass
-    dirs.add(site.getusersitepackages())
+    roots.add(site.getusersitepackages())
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        roots.add(meipass)
+    if getattr(sys, "frozen", False):
+        roots.add(os.path.dirname(sys.executable))
+
     bins = []
-    for sp in dirs:
+    for sp in roots:
         for d in glob.glob(os.path.join(sp, "nvidia", "*", "bin")):
             bins.append(d)
+    if meipass:
+        bins.append(meipass)
     if bins:
         os.environ["PATH"] = os.pathsep.join(bins) + os.pathsep + os.environ["PATH"]
 
 
+def _data_file_path():
+    """face_points.json 的存放位置：优先 exe/脚本所在目录，不可写就退回用户主目录，
+    避免打包后因工作目录不同而读写失败。"""
+    candidates = []
+    if getattr(sys, "frozen", False):
+        candidates.append(os.path.join(os.path.dirname(sys.executable), "face_points.json"))
+    candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "face_points.json"))
+    candidates.append(os.path.join(os.path.expanduser("~"), "face_points.json"))
+    for p in candidates:
+        d = os.path.dirname(p)
+        if d and os.path.isdir(d) and os.access(d, os.W_OK):
+            return p
+    return candidates[-1]
+
+
 _add_nvidia_bins_to_path()
+DATA_FILE = _data_file_path()
 
 from insightface.app import FaceAnalysis
 import cv2
@@ -102,13 +128,15 @@ def parse_action(text):
 def load_originals():
     """读取 face_points.json，把每个表情解析成 (name, action, normalized_points)。"""
     originals = []
-    if os.path.exists("face_points.json"):
-        with open("face_points.json", "r", encoding="utf-8") as f:
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
             all_data = json.load(f)
         for item in all_data:
             if "POINTS" in item:
                 originals.append((item["name"], parse_action(item.get("input", "")),
                                   normalize_points(np.array(item["POINTS"], dtype=float))))
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
     return originals
 
 
@@ -125,6 +153,12 @@ for _m in app.models.values():
             _sess.set_providers(["CUDAExecutionProvider", "CPUExecutionProvider"])
         except Exception:
             pass
+
+# 打包后 meanshape_68.pkl 定位会失效（insightface 用 __file__ 找数据文件），
+# 它只用于 3D 姿态，本项目只要 68 点坐标，所以关掉 require_pose 跳过。
+for _m in app.models.values():
+    if getattr(_m, "require_pose", False):
+        _m.require_pose = False
 
 _gpu_ok = False
 for _m in app.models.values():
@@ -186,9 +220,12 @@ while True:
         data = {"name": new_name,"input":new_input, "POINTS": landmark68}
 
         all_data = []
-        if os.path.exists("face_points.json"):
-            with open("face_points.json", "r", encoding="utf-8") as f:
-                all_data = json.load(f)
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, "r", encoding="utf-8") as f:
+                    all_data = json.load(f)
+            except json.JSONDecodeError:
+                all_data = []
 
         # 同名覆盖，没有就追加
         found = False
@@ -200,9 +237,12 @@ while True:
         if not found:
             all_data.append(data)
 
-        with open("face_points.json", "w", encoding="utf-8") as f:
-            json.dump(all_data, f, ensure_ascii=False, indent=4)
-        print("已保存到 face_points.json, name =", new_name)
+        try:
+            with open(DATA_FILE, "w", encoding="utf-8") as f:
+                json.dump(all_data, f, ensure_ascii=False, indent=4)
+            print("已保存到", DATA_FILE, "name =", new_name)
+        except Exception as e:
+            print("保存失败：", e)
 
         while True:
             cv2.imshow("face", frame)
